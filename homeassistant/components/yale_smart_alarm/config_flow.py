@@ -92,7 +92,7 @@ class YaleConfigFlow(ConfigFlow, domain=DOMAIN):
                     errors={"base": "invalid_auth"},
                 )
             except requests.HTTPError as error:
-                if "401 Client Error" in str(error):
+                if error.response.status_code == 401:
                     LOGGER.error("Authentication failed. Check credentials %s", error)
                     return self.async_show_form(
                         step_id="reauth_confirm",
@@ -141,7 +141,7 @@ class YaleConfigFlow(ConfigFlow, domain=DOMAIN):
                     errors={"base": "invalid_auth"},
                 )
             except requests.HTTPError as error:
-                if "401 Client Error" in str(error):
+                if error.response.status_code == 401:
                     LOGGER.error("Authentication failed. Check credentials %s", error)
                     return self.async_show_form(
                         step_id="user",
