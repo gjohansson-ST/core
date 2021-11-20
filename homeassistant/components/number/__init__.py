@@ -1,19 +1,21 @@
 """Component to allow numeric input for platforms."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 import logging
-from typing import Any, final
+from typing import Any, Literal, final
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.const import ATTR_MODE
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.config_validation import (  # noqa: F401
     PLATFORM_SCHEMA,
     PLATFORM_SCHEMA_BASE,
 )
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.typing import ConfigType
 
@@ -26,6 +28,7 @@ from .const import (
     DEFAULT_MIN_VALUE,
     DEFAULT_STEP,
     DOMAIN,
+    MODE_AUTO,
     SERVICE_SET_VALUE,
 )
 
@@ -48,10 +51,20 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     component.async_register_entity_service(
         SERVICE_SET_VALUE,
         {vol.Required(ATTR_VALUE): vol.Coerce(float)},
-        "async_set_value",
+        async_set_value,
     )
 
     return True
+
+
+async def async_set_value(entity: NumberEntity, service_call: ServiceCall) -> None:
+    """Service call wrapper to set a new value."""
+    value = service_call.data["value"]
+    if value < entity.min_value or value > entity.max_value:
+        raise ValueError(
+            f"Value {value} for {entity.name} is outside valid range {entity.min_value} - {entity.max_value}"
+        )
+    await entity.async_set_value(value)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -66,13 +79,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await component.async_unload_entry(entry)
 
 
+@dataclass
+class NumberEntityDescription(EntityDescription):
+    """A class that describes number entities."""
+
+
 class NumberEntity(Entity):
     """Representation of a Number entity."""
 
+    entity_description: NumberEntityDescription
     _attr_max_value: float = DEFAULT_MAX_VALUE
     _attr_min_value: float = DEFAULT_MIN_VALUE
     _attr_state: None = None
     _attr_step: float
+    _attr_mode: Literal["auto", "slider", "box"] = MODE_AUTO
     _attr_value: float
 
     @property
@@ -82,6 +102,7 @@ class NumberEntity(Entity):
             ATTR_MIN: self.min_value,
             ATTR_MAX: self.max_value,
             ATTR_STEP: self.step,
+            ATTR_MODE: self.mode,
         }
 
     @property
@@ -105,6 +126,11 @@ class NumberEntity(Entity):
             while value_range <= step:
                 step /= 10.0
         return step
+
+    @property
+    def mode(self) -> Literal["auto", "slider", "box"]:
+        """Return the mode of the entity."""
+        return self._attr_mode
 
     @property
     @final

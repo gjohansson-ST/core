@@ -43,7 +43,7 @@ class SIABaseEntity(RestoreEntity):
 
         self._cancel_availability_cb: CALLBACK_TYPE | None = None
 
-        self._attr_extra_state_attributes: dict[str, Any] = {}
+        self._attr_extra_state_attributes = {}
         self._attr_should_poll = False
         self._attr_name = SIA_NAME_FORMAT.format(
             self._port, self._account, self._zone, self._attr_device_class
@@ -125,8 +125,8 @@ class SIABaseEntity(RestoreEntity):
         """Return the device_info."""
         assert self._attr_name is not None
         assert self.unique_id is not None
-        return {
-            "name": self._attr_name,
-            "identifiers": {(DOMAIN, self.unique_id)},
-            "via_device": (DOMAIN, f"{self._port}_{self._account}"),
-        }
+        return DeviceInfo(
+            name=self._attr_name,
+            identifiers={(DOMAIN, self.unique_id)},
+            via_device=(DOMAIN, f"{self._port}_{self._account}"),
+        )

@@ -1,6 +1,7 @@
 """Component to interface with binary sensors."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 import logging
 from typing import Any, final
@@ -14,7 +15,7 @@ from homeassistant.helpers.config_validation import (  # noqa: F401
     PLATFORM_SCHEMA,
     PLATFORM_SCHEMA_BASE,
 )
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.typing import ConfigType, StateType
 
@@ -82,6 +83,9 @@ DEVICE_CLASS_PRESENCE = "presence"
 # On means problem detected, Off means no problem (OK)
 DEVICE_CLASS_PROBLEM = "problem"
 
+# On means running, Off means not running
+DEVICE_CLASS_RUNNING = "running"
+
 # On means unsafe, Off means safe
 DEVICE_CLASS_SAFETY = "safety"
 
@@ -90,6 +94,12 @@ DEVICE_CLASS_SMOKE = "smoke"
 
 # On means sound detected, Off means no sound (clear)
 DEVICE_CLASS_SOUND = "sound"
+
+# On means tampering detected, Off means no tampering (clear)
+DEVICE_CLASS_TAMPER = "tamper"
+
+# On means update available, Off means up-to-date
+DEVICE_CLASS_UPDATE = "update"
 
 # On means vibration detected, Off means no vibration
 DEVICE_CLASS_VIBRATION = "vibration"
@@ -117,9 +127,12 @@ DEVICE_CLASSES = [
     DEVICE_CLASS_POWER,
     DEVICE_CLASS_PRESENCE,
     DEVICE_CLASS_PROBLEM,
+    DEVICE_CLASS_RUNNING,
     DEVICE_CLASS_SAFETY,
     DEVICE_CLASS_SMOKE,
     DEVICE_CLASS_SOUND,
+    DEVICE_CLASS_TAMPER,
+    DEVICE_CLASS_UPDATE,
     DEVICE_CLASS_VIBRATION,
     DEVICE_CLASS_WINDOW,
 ]
@@ -149,9 +162,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await component.async_unload_entry(entry)
 
 
+@dataclass
+class BinarySensorEntityDescription(EntityDescription):
+    """A class that describes binary sensor entities."""
+
+
 class BinarySensorEntity(Entity):
     """Represent a binary sensor."""
 
+    entity_description: BinarySensorEntityDescription
     _attr_is_on: bool | None = None
     _attr_state: None = None
 

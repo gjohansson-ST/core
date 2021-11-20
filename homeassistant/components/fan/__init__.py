@@ -1,6 +1,7 @@
 """Provides functionality to interact with fans."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 import functools as ft
 import logging
@@ -22,8 +23,9 @@ from homeassistant.helpers.config_validation import (  # noqa: F401
     PLATFORM_SCHEMA,
     PLATFORM_SCHEMA_BASE,
 )
-from homeassistant.helpers.entity import ToggleEntity
+from homeassistant.helpers.entity import ToggleEntity, ToggleEntityDescription
 from homeassistant.helpers.entity_component import EntityComponent
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import bind_hass
 from homeassistant.util.percentage import (
     ordered_list_item_to_percentage,
@@ -123,7 +125,7 @@ def is_on(hass, entity_id: str) -> bool:
     return state.state == STATE_ON
 
 
-async def async_setup(hass, config: dict):
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Expose fan control via statemachine and services."""
     component = hass.data[DOMAIN] = EntityComponent(
         _LOGGER, DOMAIN, hass, SCAN_INTERVAL
@@ -224,8 +226,22 @@ def _fan_native(method):
     return method
 
 
+@dataclass
+class FanEntityDescription(ToggleEntityDescription):
+    """A class that describes fan entities."""
+
+
 class FanEntity(ToggleEntity):
     """Base class for fan entities."""
+
+    entity_description: FanEntityDescription
+    _attr_current_direction: str | None = None
+    _attr_oscillating: bool | None = None
+    _attr_percentage: int | None
+    _attr_preset_mode: str | None
+    _attr_preset_modes: list[str] | None
+    _attr_speed_count: int
+    _attr_supported_features: int = 0
 
     @_fan_native
     def set_speed(self, speed: str) -> None:
@@ -449,13 +465,10 @@ class FanEntity(ToggleEntity):
     @property
     def speed(self) -> str | None:
         """Return the current speed."""
-        if self._implemented_preset_mode:
-            preset_mode = self.preset_mode
-            if preset_mode:
-                return preset_mode
+        if self._implemented_preset_mode and (preset_mode := self.preset_mode):
+            return preset_mode
         if self._implemented_percentage:
-            percentage = self.percentage
-            if percentage is None:
+            if (percentage := self.percentage) is None:
                 return None
             return self.percentage_to_speed(percentage)
         return None
@@ -463,6 +476,9 @@ class FanEntity(ToggleEntity):
     @property
     def percentage(self) -> int | None:
         """Return the current speed as a percentage."""
+        if hasattr(self, "_attr_percentage"):
+            return self._attr_percentage
+
         if (
             not self._implemented_preset_mode
             and self.preset_modes
@@ -476,6 +492,9 @@ class FanEntity(ToggleEntity):
     @property
     def speed_count(self) -> int:
         """Return the number of speeds the fan supports."""
+        if hasattr(self, "_attr_speed_count"):
+            return self._attr_speed_count
+
         speed_list = speed_list_without_preset_modes(self.speed_list)
         if speed_list:
             return len(speed_list)
@@ -499,12 +518,12 @@ class FanEntity(ToggleEntity):
     @property
     def current_direction(self) -> str | None:
         """Return the current direction of the fan."""
-        return None
+        return self._attr_current_direction
 
     @property
-    def oscillating(self):
+    def oscillating(self) -> bool | None:
         """Return whether or not the fan is currently oscillating."""
-        return None
+        return self._attr_oscillating
 
     @property
     def capability_attributes(self):
@@ -623,7 +642,7 @@ class FanEntity(ToggleEntity):
     @property
     def supported_features(self) -> int:
         """Flag supported features."""
-        return 0
+        return self._attr_supported_features
 
     @property
     def preset_mode(self) -> str | None:
@@ -631,6 +650,9 @@ class FanEntity(ToggleEntity):
 
         Requires SUPPORT_SET_SPEED.
         """
+        if hasattr(self, "_attr_preset_mode"):
+            return self._attr_preset_mode
+
         speed = self.speed
         if self.preset_modes and speed in self.preset_modes:
             return speed
@@ -642,6 +664,9 @@ class FanEntity(ToggleEntity):
 
         Requires SUPPORT_SET_SPEED.
         """
+        if hasattr(self, "_attr_preset_modes"):
+            return self._attr_preset_modes
+
         return preset_modes_from_speed_list(self.speed_list)
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from datetime import datetime
-import logging
 from typing import Any
 
 from pyclimacell.const import (
@@ -38,6 +37,8 @@ from homeassistant.const import (
     LENGTH_MILES,
     PRESSURE_HPA,
     PRESSURE_INHG,
+    SPEED_KILOMETERS_PER_HOUR,
+    SPEED_MILES_PER_HOUR,
     TEMP_FAHRENHEIT,
 )
 from homeassistant.core import HomeAssistant
@@ -46,6 +47,7 @@ from homeassistant.helpers.sun import is_up
 from homeassistant.util import dt as dt_util
 from homeassistant.util.distance import convert as distance_convert
 from homeassistant.util.pressure import convert as pressure_convert
+from homeassistant.util.speed import convert as speed_convert
 
 from . import ClimaCellDataUpdateCoordinator, ClimaCellEntity
 from .const import (
@@ -94,8 +96,6 @@ from .const import (
     MAX_FORECASTS,
 )
 
-_LOGGER = logging.getLogger(__name__)
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -127,24 +127,11 @@ class BaseClimaCellWeatherEntity(ClimaCellEntity, WeatherEntity):
         """Initialize ClimaCell Weather Entity."""
         super().__init__(config_entry, coordinator, api_version)
         self.forecast_type = forecast_type
-
-    @property
-    def entity_registry_enabled_default(self) -> bool:
-        """Return if the entity should be enabled when first added to the entity registry."""
-        if self.forecast_type == DEFAULT_FORECAST_TYPE:
-            return True
-
-        return False
-
-    @property
-    def name(self) -> str:
-        """Return the name of the entity."""
-        return f"{self._config_entry.data[CONF_NAME]} - {self.forecast_type.title()}"
-
-    @property
-    def unique_id(self) -> str:
-        """Return the unique id of the entity."""
-        return f"{self._config_entry.unique_id}_{self.forecast_type}"
+        self._attr_entity_registry_enabled_default = (
+            forecast_type == DEFAULT_FORECAST_TYPE
+        )
+        self._attr_name = f"{config_entry.data[CONF_NAME]} - {forecast_type.title()}"
+        self._attr_unique_id = f"{config_entry.unique_id}_{forecast_type}"
 
     @staticmethod
     @abstractmethod
@@ -182,7 +169,10 @@ class BaseClimaCellWeatherEntity(ClimaCellEntity, WeatherEntity):
                 )
             if wind_speed:
                 wind_speed = round(
-                    distance_convert(wind_speed, LENGTH_MILES, LENGTH_KILOMETERS), 4
+                    speed_convert(
+                        wind_speed, SPEED_MILES_PER_HOUR, SPEED_KILOMETERS_PER_HOUR
+                    ),
+                    4,
                 )
 
         data = {
@@ -204,7 +194,10 @@ class BaseClimaCellWeatherEntity(ClimaCellEntity, WeatherEntity):
         wind_gust = self.wind_gust
         if wind_gust and self.hass.config.units.is_metric:
             wind_gust = round(
-                distance_convert(self.wind_gust, LENGTH_MILES, LENGTH_KILOMETERS), 4
+                speed_convert(
+                    self.wind_gust, SPEED_MILES_PER_HOUR, SPEED_KILOMETERS_PER_HOUR
+                ),
+                4,
             )
         cloud_cover = self.cloud_cover
         return {
@@ -252,7 +245,10 @@ class BaseClimaCellWeatherEntity(ClimaCellEntity, WeatherEntity):
         """Return the wind speed."""
         if self.hass.config.units.is_metric and self._wind_speed:
             return round(
-                distance_convert(self._wind_speed, LENGTH_MILES, LENGTH_KILOMETERS), 4
+                speed_convert(
+                    self._wind_speed, SPEED_MILES_PER_HOUR, SPEED_KILOMETERS_PER_HOUR
+                ),
+                4,
             )
         return self._wind_speed
 
@@ -274,6 +270,8 @@ class BaseClimaCellWeatherEntity(ClimaCellEntity, WeatherEntity):
 class ClimaCellWeatherEntity(BaseClimaCellWeatherEntity):
     """Entity that talks to ClimaCell v4 API to retrieve weather data."""
 
+    _attr_temperature_unit = TEMP_FAHRENHEIT
+
     @staticmethod
     def _translate_condition(
         condition: int | None, sun_is_up: bool = True
@@ -293,11 +291,6 @@ class ClimaCellWeatherEntity(BaseClimaCellWeatherEntity):
     def temperature(self):
         """Return the platform temperature."""
         return self._get_current_property(CC_ATTR_TEMPERATURE)
-
-    @property
-    def temperature_unit(self):
-        """Return the unit of measurement."""
-        return TEMP_FAHRENHEIT
 
     @property
     def _pressure(self):
@@ -424,6 +417,8 @@ class ClimaCellWeatherEntity(BaseClimaCellWeatherEntity):
 class ClimaCellV3WeatherEntity(BaseClimaCellWeatherEntity):
     """Entity that talks to ClimaCell v3 API to retrieve weather data."""
 
+    _attr_temperature_unit = TEMP_FAHRENHEIT
+
     @staticmethod
     def _translate_condition(
         condition: str | None, sun_is_up: bool = True
@@ -443,11 +438,6 @@ class ClimaCellV3WeatherEntity(BaseClimaCellWeatherEntity):
         return self._get_cc_value(
             self.coordinator.data[CURRENT], CC_V3_ATTR_TEMPERATURE
         )
-
-    @property
-    def temperature_unit(self):
-        """Return the unit of measurement."""
-        return TEMP_FAHRENHEIT
 
     @property
     def _pressure(self):

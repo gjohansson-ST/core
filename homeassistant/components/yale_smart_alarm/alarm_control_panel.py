@@ -12,15 +12,7 @@ from homeassistant.components.alarm_control_panel.const import (
     SUPPORT_ALARM_ARM_HOME,
 )
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import (
-    ATTR_IDENTIFIERS,
-    ATTR_MANUFACTURER,
-    ATTR_MODEL,
-    ATTR_NAME,
-    CONF_NAME,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-)
+from homeassistant.const import CONF_NAME, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import DeviceInfo
@@ -86,21 +78,22 @@ async def async_setup_entry(
 class YaleAlarmDevice(CoordinatorEntity, AlarmControlPanelEntity):
     """Represent a Yale Smart Alarm."""
 
-    coordinator: YaleDataUpdateCoordinator
-
-    _attr_name: str = coordinator.entry.data[CONF_NAME]
-    _attr_unique_id: str = coordinator.entry.entry_id
-    _identifier: str = coordinator.entry.data[CONF_USERNAME]
+    def __init__(self, coordinator: YaleDataUpdateCoordinator) -> None:
+        """Initialize the Yale Alarm Device."""
+        super().__init__(coordinator)
+        self._attr_name: str = coordinator.entry.data[CONF_NAME]
+        self._attr_unique_id = coordinator.entry.entry_id
+        self._identifier: str = coordinator.entry.data[CONF_USERNAME]
 
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information about this entity."""
-        return {
-            ATTR_NAME: str(self.name),
-            ATTR_MANUFACTURER: MANUFACTURER,
-            ATTR_MODEL: MODEL,
-            ATTR_IDENTIFIERS: {(DOMAIN, self._identifier)},
-        }
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._identifier)},
+            manufacturer=MANUFACTURER,
+            model=MODEL,
+            name=str(self.name),
+        )
 
     @property
     def state(self):
