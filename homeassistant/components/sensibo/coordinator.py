@@ -48,7 +48,7 @@ class SensiboDataUpdateCoordinator(DataUpdateCoordinator):
         for dev in devices:
             unique_id = dev["id"]
             name = dev["room"]["name"]
-            temperature = dev["measurements"].get("temperature", 0.0)
+            temperature = dev["measurements"].get("temperature")
             humidity = dev["measurements"].get("humidity", 0)
             ac_states = dev["acState"]
             target_temperature = ac_states.get("targetTemperature")
@@ -79,7 +79,8 @@ class SensiboDataUpdateCoordinator(DataUpdateCoordinator):
             full_features = set()
             for mode in capabilities["modes"]:
                 if "temperatures" in capabilities["modes"][mode]:
-                    full_features.add("targetTemperature")
+                    if capabilities["modes"][mode]["temperatures"]:
+                        full_features.add("targetTemperature")
                 if "swing" in capabilities["modes"][mode]:
                     full_features.add("swing")
                 if "fanLevels" in capabilities["modes"][mode]:

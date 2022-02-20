@@ -185,13 +185,14 @@ class SensiboClimate(CoordinatorEntity, ClimateEntity):
         ]
 
     @property
-    def current_temperature(self) -> float:
+    def current_temperature(self) -> float | None:
         """Return the current temperature."""
-        return convert_temperature(
-            self.coordinator.data[self.unique_id]["temp"],
-            TEMP_CELSIUS,
-            self.temperature_unit,
-        )
+        if self.coordinator.data[self.unique_id]["temp"]:
+            return convert_temperature(
+                self.coordinator.data[self.unique_id]["temp"],
+                TEMP_CELSIUS,
+                self.temperature_unit,
+            )
 
     @property
     def target_temperature(self) -> float | None:
