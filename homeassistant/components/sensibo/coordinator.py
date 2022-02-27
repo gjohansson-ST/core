@@ -1,7 +1,7 @@
 """DataUpdateCoordinator for the Sensibo integration."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pysensibo import SensiboClient
@@ -95,6 +95,16 @@ class SensiboDataUpdateCoordinator(DataUpdateCoordinator):
             calibration_temp = dev["sensorsCalibration"].get("temperature", 0.0)
             calibration_hum = dev["sensorsCalibration"].get("humidity", 0.0)
 
+            timer = dev["timer"]
+            if timer_enable := timer.get("isEnabled", False):
+                timer_acstate: dict[str, Any] = timer.get("acState")
+                timer_created: datetime | None = timer.get("createTime")
+                timer_target: datetime | None = timer.get("targetTime")
+                if timer_created:
+                    timer_created_tz = timer_created.replace(tzinfo=timezone.utc)
+                if timer_target:
+                    timer_target_tz = timer_target.replace(tzinfo=timezone.utc)
+
             device_data[unique_id] = {
                 "id": unique_id,
                 "mac": mac,
@@ -123,5 +133,11 @@ class SensiboDataUpdateCoordinator(DataUpdateCoordinator):
                 "calibration_temp": calibration_temp,
                 "calibration_hum": calibration_hum,
                 "full_capabilities": capabilities,
+                "timer": {
+                    "enabled": timer_enable,
+                    "acstate": timer_acstate,
+                    "timer_created_tz": timer_created_tz,
+                    "timer_target_tz": timer_target_tz,
+                },
             }
         return device_data
