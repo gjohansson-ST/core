@@ -1,34 +1,36 @@
 """Support for openexchangerates.org exchange rates service."""
 from __future__ import annotations
 
-from datetime import timedelta
-from http import HTTPStatus
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 import logging
+from typing import Any
 
-import requests
 import voluptuous as vol
 
-from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
-from homeassistant.const import (
-    ATTR_ATTRIBUTION,
-    CONF_API_KEY,
-    CONF_BASE,
-    CONF_NAME,
-    CONF_QUOTE,
+from homeassistant.components.sensor import (
+    PLATFORM_SCHEMA,
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.const import CONF_API_KEY, CONF_BASE, CONF_NAME, CONF_QUOTE
+from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.device_registry import DeviceEntryType
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.util import Throttle
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType, StateType
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DEFAULT_BASE, DEFAULT_NAME, DOMAIN
+from .coordinator import FxDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-_RESOURCE = "https://openexchangerates.org/api/latest.json"
 
 ATTRIBUTION = "Data provided by openexchangerates.org"
-
-DEFAULT_BASE = "USD"
-DEFAULT_NAME = "Exchange Rate Sensor"
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(hours=2)
 
@@ -42,83 +44,147 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 )
 
 
-def setup_platform(
+@dataclass
+class FxRequiredKeysMixin:
+    """Mixin for required keys."""
+
+    value_fn: Callable[[dict[str, Any]], StateType | datetime]
+
+
+@dataclass
+class FxSensorEntityDescription(SensorEntityDescription, FxRequiredKeysMixin):
+    """Describes Open Exchange Rates sensor entity."""
+
+
+SENSOR_TYPES: tuple[FxSensorEntityDescription, ...] = (
+    FxSensorEntityDescription(
+        key="timestamp",
+        name="Last Update",
+        icon="mdi:clock",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda data: data["timestamp"],
+    ),
+    FxSensorEntityDescription(
+        key="status",
+        name="Status",
+        icon="mdi:state-machine",
+        value_fn=lambda data: data["status"],
+    ),
+    FxSensorEntityDescription(
+        key="count",
+        name="API Count",
+        icon="mdi:history",
+        value_fn=lambda data: data["count"],
+    ),
+    FxSensorEntityDescription(
+        key="remain",
+        name="API calls remain",
+        icon="mdi:restore",
+        value_fn=lambda data: data["remain"],
+    ),
+)
+
+
+async def async_setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
-    add_entities: AddEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
     """Set up the Open Exchange Rates sensor."""
-    name = config.get(CONF_NAME)
-    api_key = config.get(CONF_API_KEY)
-    base = config.get(CONF_BASE)
-    quote = config.get(CONF_QUOTE)
+    _LOGGER.warning(
+        # Config flow added in Home Assistant Core 2022.6, remove import flow in 2022.8
+        "Loading Open Exchanges Rates via platform setup is deprecated; Please remove it from your configuration"
+    )
 
-    parameters = {"base": base, "app_id": api_key}
-
-    rest = OpenexchangeratesData(_RESOURCE, parameters, quote)
-    response = requests.get(_RESOURCE, params=parameters, timeout=10)
-
-    if response.status_code != HTTPStatus.OK:
-        _LOGGER.error("Check your OpenExchangeRates API key")
-        return
-
-    rest.update()
-    add_entities([OpenexchangeratesSensor(rest, name, quote)], True)
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_IMPORT},
+            data=config,
+        )
+    )
 
 
-class OpenexchangeratesSensor(SensorEntity):
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up the Open Exchange Rates sensor entry."""
+
+    coordinator: FxDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    entities: list[OpenexchangeratesSensor] = []
+    currency: str
+    for currency in entry.data[CONF_QUOTE]:
+        entities.extend(
+            OpenexchangeratesSensor(
+                coordinator,
+                entry.title,
+                entry.entry_id,
+                FxSensorEntityDescription(
+                    key=f"rate_{currency.lower()}",
+                    name=f"to {currency}",
+                    icon="mdi:currency-usd",
+                    value_fn=lambda data, currency: data[currency],
+                ),
+                currency,
+            )
+        )
+    entities.extend(
+        OpenexchangeratesSensor(
+            coordinator,
+            entry.title,
+            entry.entry_id,
+            description,
+            None,
+        )
+        for description in SENSOR_TYPES
+    )
+
+    async_add_entities(entities)
+
+
+class OpenexchangeratesSensor(CoordinatorEntity[FxDataUpdateCoordinator], SensorEntity):
     """Representation of an Open Exchange Rates sensor."""
 
-    def __init__(self, rest, name, quote):
+    entity_description: FxSensorEntityDescription
+    _attr_attribution = ATTRIBUTION
+
+    def __init__(
+        self,
+        coordinator: FxDataUpdateCoordinator,
+        name,
+        entry_id: str,
+        entity_description: FxSensorEntityDescription,
+        currency: str | None,
+    ):
         """Initialize the sensor."""
-        self.rest = rest
-        self._name = name
-        self._quote = quote
-        self._state = None
+        super().__init__(coordinator)
+        self._attr_name = f"{name} {entity_description.name}"
+        self._attr_unique_id = f"{entry_id}-{entity_description.key}"
+        self.entity_description = entity_description
+        self.currency = currency
+        self._attr_device_info = DeviceInfo(
+            entry_type=DeviceEntryType.SERVICE,
+            identifiers={(DOMAIN, entry_id)},
+            manufacturer="Open Exchange Rates",
+            name=name,
+            configuration_url="https://openexchangerates.org/account",
+        )
+        self._update_attr()
 
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
+    def _update_attr(self) -> None:
+        """Update _attr."""
+        if self.currency:
+            self._attr_native_value = self.entity_description.value_fn(
+                self.coordinator.data, self.currency
+            )
+            return
+        self._attr_native_value = self.entity_description.value_fn(
+            self.coordinator.data
+        )
 
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        return self._state
-
-    @property
-    def extra_state_attributes(self):
-        """Return other attributes of the sensor."""
-        attr = self.rest.data
-        attr[ATTR_ATTRIBUTION] = ATTRIBUTION
-
-        return attr
-
-    def update(self):
-        """Update current conditions."""
-        self.rest.update()
-        value = self.rest.data
-        self._state = round(value[str(self._quote)], 4)
-
-
-class OpenexchangeratesData:
-    """Get data from Openexchangerates.org."""
-
-    def __init__(self, resource, parameters, quote):
-        """Initialize the data object."""
-        self._resource = resource
-        self._parameters = parameters
-        self._quote = quote
-        self.data = None
-
-    @Throttle(MIN_TIME_BETWEEN_UPDATES)
-    def update(self):
-        """Get the latest data from openexchangerates.org."""
-        try:
-            result = requests.get(self._resource, params=self._parameters, timeout=10)
-            self.data = result.json()["rates"]
-        except requests.exceptions.HTTPError:
-            _LOGGER.error("Check the Openexchangerates API key")
-            self.data = None
-            return False
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_attr()
+        return super()._handle_coordinator_update()
