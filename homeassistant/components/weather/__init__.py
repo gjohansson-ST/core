@@ -7,7 +7,15 @@ import logging
 from typing import Final, TypedDict, final
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PRECISION_TENTHS, PRECISION_WHOLE, TEMP_CELSIUS
+from homeassistant.const import (
+    PRECISION_TENTHS,
+    PRECISION_WHOLE,
+    PRESSURE_HPA,
+    PRESSURE_INHG,
+    SPEED_KILOMETERS_PER_HOUR,
+    SPEED_MILES_PER_HOUR,
+    TEMP_CELSIUS,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.config_validation import (  # noqa: F401
     PLATFORM_SCHEMA,
@@ -17,6 +25,7 @@ from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.temperature import display_temp as show_temp
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.util import pressure as pressure_util, speed as speed_util
 
 # mypy: allow-untyped-defs, no-check-untyped-defs
 
@@ -206,6 +215,16 @@ class WeatherEntity(Entity):
     @property
     def state_attributes(self):
         """Return the state attributes, converted from native units to user-configured units."""
+
+        to_pressure_unit = (
+            PRESSURE_HPA if self.hass.config.units.is_metric else PRESSURE_INHG
+        )
+        to_wind_speed_unit = (
+            SPEED_KILOMETERS_PER_HOUR
+            if self.hass.config.units.is_metric
+            else SPEED_MILES_PER_HOUR
+        )
+
         data = {}
         if self.temperature is not None:
             data[ATTR_WEATHER_TEMPERATURE] = show_temp(
@@ -224,7 +243,8 @@ class WeatherEntity(Entity):
         if (pressure := self.pressure) is not None:
             if (unit := self.pressure_unit) is not None:
                 pressure = round(
-                    self.hass.config.units.pressure(pressure, unit), ROUNDING_PRECISION
+                    pressure_util.convert(pressure, unit, to_pressure_unit),
+                    ROUNDING_PRECISION,
                 )
             data[ATTR_WEATHER_PRESSURE] = pressure
 
@@ -234,7 +254,7 @@ class WeatherEntity(Entity):
         if (wind_speed := self.wind_speed) is not None:
             if (unit := self.wind_speed_unit) is not None:
                 wind_speed = round(
-                    self.hass.config.units.wind_speed(wind_speed, unit),
+                    speed_util.convert(wind_speed, unit, to_wind_speed_unit),
                     ROUNDING_PRECISION,
                 )
             data[ATTR_WEATHER_WIND_SPEED] = wind_speed
@@ -268,7 +288,9 @@ class WeatherEntity(Entity):
                 ) is not None:
                     if (unit := self.pressure_unit) is not None:
                         pressure = round(
-                            self.hass.config.units.pressure(native_pressure, unit),
+                            pressure_util.convert(
+                                native_pressure, unit, to_pressure_unit
+                            ),
                             ROUNDING_PRECISION,
                         )
                         forecast_entry[ATTR_FORECAST_PRESSURE] = pressure
@@ -277,7 +299,9 @@ class WeatherEntity(Entity):
                 ) is not None:
                     if (unit := self.wind_speed_unit) is not None:
                         wind_speed = round(
-                            self.hass.config.units.wind_speed(native_wind_speed, unit),
+                            speed_util.convert(
+                                native_wind_speed, unit, to_wind_speed_unit
+                            ),
                             ROUNDING_PRECISION,
                         )
                         forecast_entry[ATTR_FORECAST_WIND_SPEED] = wind_speed
