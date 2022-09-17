@@ -31,7 +31,6 @@ from homeassistant.components.weather import (
     ATTR_FORECAST_NATIVE_PRECIPITATION,
     ATTR_FORECAST_NATIVE_PRESSURE,
     ATTR_FORECAST_NATIVE_TEMP,
-    ATTR_FORECAST_NATIVE_TEMP_LOW,
     ATTR_FORECAST_NATIVE_WIND_SPEED,
     ATTR_FORECAST_TIME,
     ATTR_FORECAST_WIND_BEARING,
@@ -172,7 +171,7 @@ class SmhiWeather(WeatherEntity):
         """Refresh the forecast data from SMHI weather API."""
         try:
             async with async_timeout.timeout(TIMEOUT):
-                self._forecasts = await self._smhi_api.async_get_forecast()
+                self._forecasts = await self._smhi_api.async_get_forecast_hour()
                 self._fail_count = 0
         except (asyncio.TimeoutError, SmhiForecastException):
             _LOGGER.error("Failed to connect to SMHI API, retry in 5 minutes")
@@ -220,7 +219,6 @@ class SmhiWeather(WeatherEntity):
                 {
                     ATTR_FORECAST_TIME: forecast.valid_time.isoformat(),
                     ATTR_FORECAST_NATIVE_TEMP: forecast.temperature_max,
-                    ATTR_FORECAST_NATIVE_TEMP_LOW: forecast.temperature_min,
                     ATTR_FORECAST_NATIVE_PRECIPITATION: forecast.total_precipitation,
                     ATTR_FORECAST_CONDITION: condition,
                     ATTR_FORECAST_NATIVE_PRESSURE: forecast.pressure,
