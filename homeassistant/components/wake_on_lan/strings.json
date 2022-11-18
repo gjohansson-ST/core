@@ -1,0 +1,45 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_account%]"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "switch": "Configure switch?"
+        },
+        "data_description": {
+          "switch": "Select yes to also configure a switch"
+        }
+      },
+      "switch": {
+        "data": {
+          "mac": "MAC address",
+          "name": "[%key:common::config_flow::data::name%]",
+          "broadcast_address": "Broadcast address",
+          "broadcast_port": "Broadcast post",
+          "host": "[%key:common::config_flow::data::host%]",
+          "turn_off": "Turn off action"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "broadcast_address": "[%key:component::wake_on_lan::config::step::switch::data::broadcast_address%]",
+          "broadcast_port": "[%key:component::wake_on_lan::config::step::switch::data::broadcast_port%]",
+          "host": "[%key:common::config_flow::data::host%]",
+          "turn_off": "[%key:component::wake_on_lan::config::step::switch::data::turn_off%]"
+        }
+      }
+    }
+  },
+  "issues": {
+    "deprecated_yaml": {
+      "title": "The Wake on LAN YAML configuration is being removed",
+      "description": "Configuring Wake on LAN using YAML is being removed.\n\nYour existing YAML configuration has been imported into the UI automatically.\n\nRemove the Wake on LAN YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue."
+    }
+  }
+}

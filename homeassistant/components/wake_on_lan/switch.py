@@ -12,6 +12,7 @@ from homeassistant.components.switch import (
     PLATFORM_SCHEMA as PARENT_PLATFORM_SCHEMA,
     SwitchEntity,
 )
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_BROADCAST_ADDRESS,
     CONF_BROADCAST_PORT,
@@ -23,16 +24,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.script import Script
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from .const import DOMAIN
+from .const import CONF_OFF_ACTION, CONF_SWITCH, DEFAULT_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_OFF_ACTION = "turn_off"
-
-DEFAULT_NAME = "Wake on LAN"
 DEFAULT_PING_TIMEOUT = 1
 
 PLATFORM_SCHEMA = PARENT_PLATFORM_SCHEMA.extend(
@@ -47,21 +46,49 @@ PLATFORM_SCHEMA = PARENT_PLATFORM_SCHEMA.extend(
 )
 
 
-def setup_platform(
+async def async_setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
-    add_entities: AddEntitiesCallback,
+    async_add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
     """Set up a wake on lan switch."""
-    broadcast_address: str | None = config.get(CONF_BROADCAST_ADDRESS)
-    broadcast_port: int | None = config.get(CONF_BROADCAST_PORT)
-    host: str | None = config.get(CONF_HOST)
-    mac_address: str = config[CONF_MAC]
-    name: str = config[CONF_NAME]
-    off_action: list[Any] | None = config.get(CONF_OFF_ACTION)
+    async_create_issue(
+        hass,
+        DOMAIN,
+        "deprecated_yaml",
+        breaks_in_ha_version="2022.12.0",
+        is_fixable=False,
+        severity=IssueSeverity.WARNING,
+        translation_key="deprecated_yaml",
+    )
 
-    add_entities(
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_IMPORT},
+            data={
+                **config,
+                CONF_SWITCH: True,
+                CONF_OFF_ACTION: config.get(CONF_OFF_ACTION, [])[0],
+            },
+        )
+    )
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up Wake on LAN Switch platform."""
+
+    broadcast_address: str | None = entry.options.get(CONF_BROADCAST_ADDRESS)
+    broadcast_port: float | None = entry.options.get(CONF_BROADCAST_PORT)
+    host: str | None = entry.options.get(CONF_HOST)
+    mac_address: str = entry.options[CONF_MAC]
+    name: str = entry.options[CONF_NAME]
+    off_action: list[Any] | None = [entry.options.get(CONF_OFF_ACTION)]
+
+    async_add_entities(
         [
             WolSwitch(
                 hass,
@@ -70,7 +97,7 @@ def setup_platform(
                 mac_address,
                 off_action,
                 broadcast_address,
-                broadcast_port,
+                int(broadcast_port) if broadcast_port else None,
             )
         ],
         host is not None,

@@ -5,12 +5,14 @@ import logging
 import voluptuous as vol
 import wakeonlan
 
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_BROADCAST_ADDRESS, CONF_BROADCAST_PORT, CONF_MAC
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN
+from .const import CONF_SWITCH, DOMAIN, PLATFORMS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +29,30 @@ WAKE_ON_LAN_SEND_MAGIC_PACKET_SCHEMA = vol.Schema(
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the wake on LAN component."""
+
+    async_create_issue(
+        hass,
+        DOMAIN,
+        "deprecated_yaml",
+        breaks_in_ha_version="2022.12.0",
+        is_fixable=False,
+        severity=IssueSeverity.WARNING,
+        translation_key="deprecated_yaml",
+    )
+
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_IMPORT},
+            data={CONF_SWITCH: False, CONF_MAC: "00:00:00:00:00"},
+        )
+    )
+
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Wake on LAN from a config entry."""
 
     async def send_magic_packet(call: ServiceCall) -> None:
         """Send magic packet to wake up a device."""
@@ -51,11 +77,25 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             partial(wakeonlan.send_magic_packet, mac_address, **service_kwargs)
         )
 
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SEND_MAGIC_PACKET,
-        send_magic_packet,
-        schema=WAKE_ON_LAN_SEND_MAGIC_PACKET_SCHEMA,
-    )
+    if not hass.services.has_service(DOMAIN, SERVICE_SEND_MAGIC_PACKET):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SEND_MAGIC_PACKET,
+            send_magic_packet,
+            schema=WAKE_ON_LAN_SEND_MAGIC_PACKET_SCHEMA,
+        )
+
+    entry.async_on_unload(entry.add_update_listener(async_update_listener))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload Sensibo config entry."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Update listener for options."""
+    await hass.config_entries.async_reload(entry.entry_id)

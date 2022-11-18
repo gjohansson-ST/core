@@ -1,8 +1,45 @@
 {
+    "config": {
+        "abort": {
+            "already_configured": "Account is already configured"
+        },
+        "step": {
+            "switch": {
+                "data": {
+                    "broadcast_address": "Broadcast address",
+                    "broadcast_port": "Broadcast post",
+                    "host": "Host",
+                    "mac": "MAC address",
+                    "name": "Name",
+                    "turn_off": "Turn off action"
+                }
+            },
+            "user": {
+                "data": {
+                    "switch": "Configure switch?"
+                },
+                "data_description": {
+                    "switch": "Select yes to also configure a switch"
+                }
+            }
+        }
+    },
     "issues": {
-        "moved_yaml": {
-            "description": "Configuring Wake on Lan using YAML has been moved to integration key.\n\nYour existing YAML configuration will be working for 2 more versions.\n\nMigrate your YAML configuration to the integration key according to the documentation.",
-            "title": "The Wake on Lan YAML configuration has been moved"
+        "deprecated_yaml": {
+            "description": "Configuring Wake on LAN using YAML is being removed.\n\nYour existing YAML configuration has been imported into the UI automatically.\n\nRemove the Wake on LAN YAML configuration from your configuration.yaml file and restart Home Assistant to fix this issue.",
+            "title": "The Wake on LAN YAML configuration is being removed"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "broadcast_address": "Broadcast address",
+                    "broadcast_port": "Broadcast post",
+                    "host": "Host",
+                    "turn_off": "Turn off action"
+                }
+            }
         }
     }
 }
