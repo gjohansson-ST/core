@@ -48,6 +48,7 @@ ATTR_MEDIAN = "median"
 ATTR_LAST = "last"
 ATTR_LAST_ENTITY_ID = "last_entity_id"
 ATTR_RANGE = "range"
+ATTR_ENTITIES = "entities"
 
 ICON = "mdi:calculator"
 
@@ -262,13 +263,14 @@ class MinMaxSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the state attributes of the sensor."""
+        attributes: dict[str, Any] = {ATTR_ENTITIES: self._entity_ids}
         if self._sensor_type == "min":
-            return {ATTR_MIN_ENTITY_ID: self.min_entity_id}
+            attributes[ATTR_MIN_ENTITY_ID] = self.min_entity_id
         if self._sensor_type == "max":
-            return {ATTR_MAX_ENTITY_ID: self.max_entity_id}
+            attributes[ATTR_MAX_ENTITY_ID] = self.max_entity_id
         if self._sensor_type == "last":
-            return {ATTR_LAST_ENTITY_ID: self.last_entity_id}
-        return None
+            attributes[ATTR_LAST_ENTITY_ID] = self.last_entity_id
+        return attributes
 
     @callback
     def _async_min_max_sensor_state_listener(
