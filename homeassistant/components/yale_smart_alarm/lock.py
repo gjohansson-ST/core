@@ -1,6 +1,7 @@
 """Lock for Yale Alarm."""
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.lock import LockEntity
@@ -45,14 +46,21 @@ class YaleDoorlock(YaleEntity, LockEntity):
     ) -> None:
         """Initialize the Yale Lock Device."""
         super().__init__(coordinator, data)
-        self._attr_code_format = f"^\\d{code_format}$"
+        self._code_format = f"^\\d{code_format}$"
         self.lock_name: str = data["name"]
 
     async def async_unlock(self, **kwargs: Any) -> None:
         """Send unlock command."""
-        code: str | None = kwargs.get(
-            ATTR_CODE, self.coordinator.entry.options.get(CONF_CODE)
-        )
+        if (
+            code := kwargs.get(ATTR_CODE, self.coordinator.entry.options.get(CONF_CODE))
+        ) is None:
+            raise ValueError(f"No code provided for unlocking {self.lock_name}")
+        if (
+            code_format_cmp := re.compile(self._code_format)
+        ) and not code_format_cmp.match(code):
+            raise ValueError(
+                f"Code '{code}' for unlocking {self.lock_name} doesn't match pattern {self._code_format}"
+            )
         return await self.async_set_lock("unlocked", code)
 
     async def async_lock(self, **kwargs: Any) -> None:
