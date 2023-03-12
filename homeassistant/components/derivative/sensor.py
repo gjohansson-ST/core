@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal, DecimalException
+from functools import partial
 import logging
 from typing import TYPE_CHECKING
 
@@ -22,8 +23,8 @@ from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.components.recorder import get_instance, history
 
 from .const import (
     CONF_ROUND_DIGITS,
@@ -126,7 +127,7 @@ async def async_setup_platform(
     async_add_entities([derivative])
 
 
-class DerivativeSensor(RestoreEntity, SensorEntity):
+class DerivativeSensor(SensorEntity):
     """Representation of an derivative sensor."""
 
     _attr_icon = ICON
@@ -170,21 +171,16 @@ class DerivativeSensor(RestoreEntity, SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Handle entity which will be added."""
         await super().async_added_to_hass()
-        if (state := await self.async_get_last_state()) is not None:
-            try:
-                self._state = Decimal(state.state)
-            except SyntaxError as err:
-                _LOGGER.warning("Could not restore last state: %s", err)
 
         @callback
         def calc_derivative(event: Event) -> None:
             """Handle the sensor state changes."""
-            old_state: State | None
-            new_state: State | None
+            old_state: State | None = event.data.get("old_state")
+            new_state: State | None = event.data.get("new_state")
             if (
-                (old_state := event.data.get("old_state")) is None
+                old_state is None
                 or old_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
-                or (new_state := event.data.get("new_state")) is None
+                or new_state is None
                 or new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE)
             ):
                 return
@@ -251,6 +247,35 @@ class DerivativeSensor(RestoreEntity, SensorEntity):
 
             self._state = derivative
             self.async_write_ha_state()
+
+        async def get_history() -> None:
+            """Load history."""
+            if not "recorder" in self.hass.config.components:
+                return
+            history_result = await get_instance(self.hass).async_add_executor_job(
+                partial(
+                    history.get_last_state_changes,
+                    self.hass,
+                    2,
+                    entity_id=self._sensor_source_id,
+                )
+            )
+            if (
+                not (input_history := history_result.get(self._sensor_source_id))
+                or len(input_history) != 2
+            ):
+                return
+            state_event = Event(
+                "",
+                {
+                    "entity_id": self._sensor_source_id,
+                    "new_state": input_history[1],
+                    "old_state": input_history[0],
+                },
+            )
+            calc_derivative(state_event)
+
+        await get_history()
 
         self.async_on_remove(
             async_track_state_change_event(
