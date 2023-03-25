@@ -1,7 +1,6 @@
 """The tests for the Command line sensor platform."""
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
 
@@ -11,9 +10,6 @@ from homeassistant import setup
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from homeassistant.util import dt
-
-from tests.common import async_fire_time_changed
 
 
 async def setup_test_entities(hass: HomeAssistant, config_dict: dict[str, Any]) -> None:
@@ -71,14 +67,6 @@ async def test_template_render(hass: HomeAssistant) -> None:
             "command": "echo {{ states.sensor.input_sensor.state }}",
         },
     )
-
-    # Give time for template to load
-    async_fire_time_changed(
-        hass,
-        dt.utcnow() + timedelta(minutes=1),
-    )
-    await hass.async_block_till_done()
-
     entity_state = hass.states.get("sensor.test")
     assert entity_state
     assert entity_state.state == "sensor_value"
@@ -98,15 +86,7 @@ async def test_template_render_with_quote(hass: HomeAssistant) -> None:
             },
         )
 
-        # Give time for template to load
-        async_fire_time_changed(
-            hass,
-            dt.utcnow() + timedelta(minutes=1),
-        )
-        await hass.async_block_till_done()
-
-        assert len(check_output.mock_calls) == 2
-        check_output.assert_called_with(
+        check_output.assert_called_once_with(
             'echo "sensor_value" "3 4"',
             shell=True,  # nosec # shell by design
             timeout=15,

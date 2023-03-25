@@ -8,16 +8,9 @@ import logging
 
 import voluptuous as vol
 
-from homeassistant.components.sensor import (
-    CONF_STATE_CLASS,
-    DEVICE_CLASSES_SCHEMA,
-    PLATFORM_SCHEMA,
-    STATE_CLASSES_SCHEMA,
-    SensorEntity,
-)
+from homeassistant.components.sensor import PLATFORM_SCHEMA, SensorEntity
 from homeassistant.const import (
     CONF_COMMAND,
-    CONF_DEVICE_CLASS,
     CONF_NAME,
     CONF_UNIQUE_ID,
     CONF_UNIT_OF_MEASUREMENT,
@@ -28,12 +21,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import TemplateError
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.reload import async_setup_reload_service
+from homeassistant.helpers.reload import setup_reload_service
 from homeassistant.helpers.template import Template
-from homeassistant.helpers.template_entity import (
-    TEMPLATE_SENSOR_BASE_SCHEMA,
-    TemplateSensor,
-)
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from . import check_output_or_log
@@ -56,25 +45,19 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_UNIT_OF_MEASUREMENT): cv.string,
         vol.Optional(CONF_VALUE_TEMPLATE): cv.template,
         vol.Optional(CONF_UNIQUE_ID): cv.string,
-        vol.Optional(CONF_DEVICE_CLASS): DEVICE_CLASSES_SCHEMA,
-        vol.Optional(CONF_STATE_CLASS): STATE_CLASSES_SCHEMA,
     }
 )
 
 
-async def async_setup_platform(
+def setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
+    add_entities: AddEntitiesCallback,
     discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
     """Set up the Command Sensor."""
 
-    await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
-
-    sensor_config = vol.Schema(
-        TEMPLATE_SENSOR_BASE_SCHEMA.schema, extra=vol.REMOVE_EXTRA
-    )(config)
+    setup_reload_service(hass, DOMAIN, PLATFORMS)
 
     name: str = config[CONF_NAME]
     command: str = config[CONF_COMMAND]
@@ -87,30 +70,17 @@ async def async_setup_platform(
     json_attributes: list[str] | None = config.get(CONF_JSON_ATTRIBUTES)
     data = CommandSensorData(hass, command, command_timeout)
 
-    async_add_entities(
-        [
-            CommandSensor(
-                hass,
-                sensor_config,
-                data,
-                name,
-                unit,
-                value_template,
-                json_attributes,
-                unique_id,
-            )
-        ],
+    add_entities(
+        [CommandSensor(data, name, unit, value_template, json_attributes, unique_id)],
         True,
     )
 
 
-class CommandSensor(TemplateSensor, SensorEntity):
+class CommandSensor(SensorEntity):
     """Representation of a sensor that is using shell commands."""
 
     def __init__(
         self,
-        hass: HomeAssistant,
-        config: ConfigType,
         data: CommandSensorData,
         name: str,
         unit_of_measurement: str | None,
@@ -119,22 +89,18 @@ class CommandSensor(TemplateSensor, SensorEntity):
         unique_id: str | None,
     ) -> None:
         """Initialize the sensor."""
-        TemplateSensor.__init__(
-            self,
-            hass,
-            config=config,
-            fallback_name=name,
-            unique_id=unique_id,
-        )
         self.data = data
         self._attr_extra_state_attributes = {}
         self._json_attributes = json_attributes
+        self._attr_name = name
         self._attr_native_value = None
+        self._attr_native_unit_of_measurement = unit_of_measurement
         self._value_template = value_template
+        self._attr_unique_id = unique_id
 
-    async def async_update(self) -> None:
+    def update(self) -> None:
         """Get the latest data and updates the state."""
-        await self.hass.async_add_executor_job(self.data.update)
+        self.data.update()
         value = self.data.value
 
         if self._json_attributes:
@@ -158,10 +124,10 @@ class CommandSensor(TemplateSensor, SensorEntity):
         if value is None:
             value = STATE_UNKNOWN
         elif self._value_template is not None:
-            self._attr_native_value = await self.hass.async_add_executor_job(
-                self._value_template.render_with_possible_json_value,
-                value,
-                STATE_UNKNOWN,
+            self._attr_native_value = (
+                self._value_template.render_with_possible_json_value(
+                    value, STATE_UNKNOWN
+                )
             )
         else:
             self._attr_native_value = value
